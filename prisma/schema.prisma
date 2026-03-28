@@ -45,17 +45,27 @@ enum NotificationType {
   FRIEND_ACCEPTED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
 model User {
-  id          String    @id @default(uuid())
-  fullName String
-  username    String    @unique
-  email       String    @unique
-  isVerified  Boolean   @default(false)
-  avatarUrl   String?
-  bio         String?
-  lastSeenAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  fullName      String
+  username      String    @unique
+  email         String    @unique
+  isVerified    Boolean   @default(false)
+  avatarUrl     String?
+  backgroundUrl String?
+  bio           String?
+  gender        Gender?
+  dateOfBirth   DateTime?
+  phoneNumber   String?   @unique
+  lastSeenAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   accounts        Account[]
   participants    Participant[]
