@@ -7,6 +7,7 @@ import { RedisModule } from './shared/redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { MinioModule } from './shared/minio/minio.module';
+import { FriendshipModule } from './friendship/friendship.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { MinioModule } from './shared/minio/minio.module';
     MinioModule,
     AuthModule,
     UserModule,
+    FriendshipModule,
   ],
   controllers: [AppController],
   providers: [AppService],
