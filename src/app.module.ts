@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { MinioModule } from './shared/minio/minio.module';
 import { FriendshipModule } from './friendship/friendship.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { FriendshipModule } from './friendship/friendship.module';
     AuthModule,
     UserModule,
     FriendshipModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
