@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { FriendshipStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FriendshipStatus, NotificationType } from '@prisma/client';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes.enum';
+import { NotificationCreatedEvent } from '../notification/events/notification-created.event';
 import { PrismaService } from '../shared/prisma/prisma.service';
 import { FriendshipQueryDto } from './dto/friendship-query.dto';
 import { SendFriendRequestDto } from './dto/send-friend-request.dto';
+import {
+  FRIEND_ACCEPTED,
+  FRIEND_REQUEST,
+} from 'src/notification/types/notification-type';
 
 const USER_SELECT = {
   id: true,
@@ -15,19 +21,25 @@ const USER_SELECT = {
 
 @Injectable()
 export class FriendshipService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
-  async sendRequest(
-    userId: string,
-    userFullName: string,
-    dto: SendFriendRequestDto,
-  ) {
+  async sendRequest(userId: string, dto: SendFriendRequestDto) {
     if (userId === dto.addresseeId) {
       throw new AppException(
         ErrorCode.FRIENDSHIP_SELF_REQUEST,
         'Cannot send friend request to yourself',
         400,
       );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.INTERNAL_ERROR, '', 500);
     }
 
     const target = await this.prisma.user.findUnique({
@@ -70,27 +82,43 @@ export class FriendshipService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const friendship = await tx.friendship.create({
-        data: {
-          requesterId: userId,
-          addresseeId: dto.addresseeId,
-          status: FriendshipStatus.PENDING,
-        },
-      });
-      await tx.notification.create({
-        data: {
-          userId: dto.addresseeId,
-          type: 'FRIEND_REQUEST',
-          payload: {
-            friendshipId: friendship.id,
-            fromUserId: userId,
-            fromUserName: userFullName,
+    const { friendship, notification } = await this.prisma.$transaction(
+      async (tx) => {
+        const friendship = await tx.friendship.create({
+          data: {
+            requesterId: userId,
+            addresseeId: dto.addresseeId,
+            status: FriendshipStatus.PENDING,
           },
-        },
-      });
-      return friendship;
-    });
+        });
+        const notification = await tx.notification.create({
+          data: {
+            userId: dto.addresseeId,
+            type: NotificationType.FRIEND_REQUEST,
+            payload: {
+              friendshipId: friendship.id,
+              fromUserId: userId,
+              fromUserAvatar: user.avatarUrl,
+              fromUserName: user.fullName,
+            } as FRIEND_REQUEST,
+          },
+        });
+        return { friendship, notification };
+      },
+    );
+
+    this.eventEmitter.emit(
+      'notification.created',
+      new NotificationCreatedEvent(
+        notification.id,
+        notification.userId,
+        notification.type,
+        notification.payload as FRIEND_REQUEST,
+        notification.createdAt,
+      ),
+    );
+
+    return friendship;
   }
 
   async acceptRequest(
@@ -116,25 +144,48 @@ export class FriendshipService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.friendship.update({
-        where: { id: friendshipId },
-        data: { status: FriendshipStatus.ACCEPTED },
-      });
-      // notify the requester that their friend request was accepted
-      await tx.notification.create({
-        data: {
-          userId: friendship.requesterId,
-          type: 'FRIEND_ACCEPTED',
-          payload: {
-            friendshipId: friendship.id,
-            byUserId: userId,
-            byUserName: userFullName,
-          },
-        },
-      });
-      return updated;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
     });
+    if (!user) {
+      throw new AppException(ErrorCode.INTERNAL_ERROR, '', 500);
+    }
+
+    const { updated, notification } = await this.prisma.$transaction(
+      async (tx) => {
+        const updated = await tx.friendship.update({
+          where: { id: friendshipId },
+          data: { status: FriendshipStatus.ACCEPTED },
+        });
+        // notify the requester that their friend request was accepted
+        const notification = await tx.notification.create({
+          data: {
+            userId: friendship.requesterId,
+            type: NotificationType.FRIEND_ACCEPTED,
+            payload: {
+              friendshipId: friendship.id,
+              byUserId: userId,
+              byUserName: userFullName,
+              byUserAvatar: user.avatarUrl,
+            } as FRIEND_ACCEPTED,
+          },
+        });
+        return { updated, notification };
+      },
+    );
+
+    this.eventEmitter.emit(
+      'notification.created',
+      new NotificationCreatedEvent(
+        notification.id,
+        notification.userId,
+        notification.type,
+        notification.payload as FRIEND_ACCEPTED,
+        notification.createdAt,
+      ),
+    );
+
+    return updated;
   }
 
   async rejectRequest(userId: string, friendshipId: string) {

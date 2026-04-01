@@ -27,7 +27,7 @@ export class FriendshipController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: SendFriendRequestDto,
   ) {
-    return this.friendshipService.sendRequest(user.sub, user.fullName, dto);
+    return this.friendshipService.sendRequest(user.sub, dto);
   }
 
   @Post('requests/:id/accept')
