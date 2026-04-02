@@ -10,6 +10,7 @@ import { UserModule } from './user/user.module';
 import { MinioModule } from './shared/minio/minio.module';
 import { FriendshipModule } from './friendship/friendship.module';
 import { NotificationModule } from './notification/notification.module';
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationModule } from './notification/notification.module';
     UserModule,
     FriendshipModule,
     NotificationModule,
+    GatewayModule,
   ],
   controllers: [AppController],
   providers: [AppService],

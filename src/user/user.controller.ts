@@ -6,6 +6,7 @@ import {
   HttpCode,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -16,6 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { UserService } from './user.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SearchUserQueryDto } from './dto/get-user-query.dto';
 import { createUploadOptions } from './upload.config';
 import { AppException } from '../common/errors/app.exception';
 import { ErrorCode } from '../common/errors/error-codes.enum';
@@ -28,6 +30,18 @@ export class UserController {
   @Get('me')
   getProfile(@CurrentUser() user: JwtPayload) {
     return this.userService.getProfile(user.sub);
+  }
+
+  @Get('search')
+  searchUsers(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: SearchUserQueryDto,
+  ) {
+    return this.userService.searchUsers(
+      query.q,
+      user.sub,
+      query.includeFriendship,
+    );
   }
 
   @Patch('me')
