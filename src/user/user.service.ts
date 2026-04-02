@@ -77,7 +77,7 @@ export class UserService {
       (f) => f.addresseeId === userId && f.status === FriendshipStatus.BLOCKED,
     );
     if (blockedByThem) {
-      return { status: 'NONE' as const };
+      return { status: 'BLOCKED_BY_THEM' as const };
     }
 
     const record = records.find((f) => f.status !== FriendshipStatus.BLOCKED);

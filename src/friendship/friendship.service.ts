@@ -449,7 +449,7 @@ export class FriendshipService {
       (f) => f.addresseeId === userId && f.status === FriendshipStatus.BLOCKED,
     );
     if (blockedByThem) {
-      return { status: 'NONE' };
+      return { status: 'BLOCKED_BY_THEM' };
     }
 
     const friendship = friendships.find(
