@@ -13,10 +13,26 @@ export class NotificationService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
+    // 1. Tạo mốc thời gian 30 ngày trước
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 2. Xác định mốc thời gian bắt đầu thực tế
+    // Nếu query.since mới hơn 30 ngày trước thì dùng query.since, ngược lại dùng mốc 30 ngày
+    let startDate = thirtyDaysAgo;
+    if (query.since) {
+      const querySinceDate = new Date(query.since);
+      if (querySinceDate > thirtyDaysAgo) {
+        startDate = querySinceDate;
+      }
+    }
+
     const where = {
       userId,
       ...(query.isRead !== undefined ? { isRead: query.isRead } : {}),
-      ...(query.since ? { createdAt: { gt: new Date(query.since) } } : {}), // sync
+      createdAt: {
+        gte: startDate,
+      },
     };
 
     const [data, total] = await Promise.all([
