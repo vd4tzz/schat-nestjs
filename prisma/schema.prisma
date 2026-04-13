@@ -97,6 +97,7 @@ model Conversation {
   name          String?
   avatarUrl     String?
   createdById   String
+  canonicalKey  String?          @unique
   lastSeq       BigInt           @default(0)
   lastMessageId String?          @unique
   updatedAt     DateTime         @updatedAt

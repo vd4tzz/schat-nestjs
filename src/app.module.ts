@@ -11,6 +11,7 @@ import { MinioModule } from './shared/minio/minio.module';
 import { FriendshipModule } from './friendship/friendship.module';
 import { NotificationModule } from './notification/notification.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { GatewayModule } from './gateway/gateway.module';
     FriendshipModule,
     NotificationModule,
     GatewayModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
