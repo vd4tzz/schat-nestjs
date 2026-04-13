@@ -10,12 +10,6 @@ import { MarkReadDto } from './dto/mark-read.dto';
 import { ReactMessageDto } from './dto/react-message.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
-// const messageSenderSelect = {
-//   id: true,
-//   fullName: true,
-//   avatarUrl: true,
-// };
-
 @Injectable()
 export class MessageService {
   constructor(
@@ -23,11 +17,7 @@ export class MessageService {
     private readonly redis: RedisService,
   ) {}
 
-  /**
-   * List messages in a conversation for an authenticated participant.
-   * Verifies the user is a member before returning paginated results.
-   */
-  async findOne(userId: string, conversationId: string, messageId: string) {
+  async getMessage(userId: string, conversationId: string, messageId: string) {
     const participant = await this.prisma.participant.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
     });
@@ -55,7 +45,7 @@ export class MessageService {
     return message;
   }
 
-  async list(
+  async getMessages(
     userId: string,
     conversationId: string,
     query: ListMessagesQueryDto,
@@ -63,6 +53,7 @@ export class MessageService {
     const participant = await this.prisma.participant.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
     });
+
     if (!participant) {
       throw new AppException(
         ErrorCode.CONVERSATION_NOT_FOUND,
@@ -89,7 +80,7 @@ export class MessageService {
     return messages.reverse();
   }
 
-  async send(userId: string, dto: SendMessageDto) {
+  async sendMessage(userId: string, dto: SendMessageDto) {
     const { conversationId, content, type = 'TEXT', replyToId } = dto;
 
     const conversation = await this.prisma.conversation.findFirst({
@@ -144,7 +135,7 @@ export class MessageService {
     return { message, otherParticipantIds };
   }
 
-  async markRead(userId: string, dto: MarkReadDto) {
+  async markReadMessage(userId: string, dto: MarkReadDto) {
     const { conversationId, seq } = dto;
 
     const conversation = await this.prisma.conversation.findFirst({
@@ -153,7 +144,10 @@ export class MessageService {
         participants: { some: { userId, leftAt: null } },
       },
       include: {
-        participants: { where: { leftAt: null }, select: { userId: true } },
+        participants: {
+          where: { leftAt: null },
+          select: { userId: true, lastReadSeq: true },
+        },
       },
     });
 
@@ -166,43 +160,55 @@ export class MessageService {
     }
 
     const readSeq = BigInt(seq);
+    const participantIds = conversation.participants.map((p) => p.userId);
 
-    const participant = await this.prisma.participant.findUnique({
-      where: { conversationId_userId: { conversationId, userId } },
-    });
-
-    if (participant && participant.lastReadSeq >= readSeq) {
-      return {
+    const { count } = await this.prisma.participant.updateMany({
+      where: {
         conversationId,
         userId,
-        lastSeq: participant.lastReadSeq,
-        participantIds: conversation.participants.map((p) => p.userId),
-        readAt: new Date(),
-      };
-    }
-
-    await this.prisma.participant.update({
-      where: { conversationId_userId: { conversationId, userId } },
+        lastReadSeq: { lt: readSeq },
+      },
       data: { lastReadSeq: readSeq },
     });
 
-    const participantIds = conversation.participants.map((p) => p.userId);
+    const currentParticipant = conversation.participants.find(
+      (p) => p.userId === userId,
+    );
+
+    const lastSeq =
+      count === 0 ? (currentParticipant?.lastReadSeq ?? readSeq) : readSeq;
 
     return {
       conversationId,
       userId,
-      lastSeq: readSeq,
+      lastSeq,
       participantIds,
       readAt: new Date(),
     };
   }
 
-  async edit(userId: string, dto: EditMessageDto) {
+  async editMessage(userId: string, dto: EditMessageDto) {
     const { conversationId, messageId, content } = dto;
 
-    const message = await this.prisma.message.findFirst({
-      where: { id: messageId, conversationId },
-    });
+    const [participants, message] = await Promise.all([
+      this.prisma.participant.findMany({
+        where: { conversationId, leftAt: null },
+        select: { userId: true },
+      }),
+
+      this.prisma.message.findFirst({
+        where: { id: messageId, conversationId },
+      }),
+    ]);
+
+    const participant = participants.find((p) => p.userId === userId);
+    if (!participant) {
+      throw new AppException(
+        ErrorCode.CONVERSATION_NOT_FOUND,
+        'Conversation not found',
+        404,
+      );
+    }
 
     if (!message) {
       throw new AppException(
@@ -211,9 +217,11 @@ export class MessageService {
         404,
       );
     }
+
     if (message.senderId !== userId) {
       throw new AppException(ErrorCode.MESSAGE_FORBIDDEN, 'Forbidden', 403);
     }
+
     if (message.isDeleted) {
       throw new AppException(
         ErrorCode.MESSAGE_DELETED,
@@ -227,23 +235,33 @@ export class MessageService {
       data: { content, isEdited: true },
     });
 
-    const participants = await this.prisma.participant.findMany({
-      where: { conversationId, leftAt: null },
-      select: { userId: true },
-    });
-
     return {
       message: updated,
       participantIds: participants.map((p) => p.userId),
     };
   }
 
-  async delete(userId: string, dto: DeleteMessageDto) {
+  async deleteMessage(userId: string, dto: DeleteMessageDto) {
     const { conversationId, messageId } = dto;
 
-    const message = await this.prisma.message.findFirst({
-      where: { id: messageId, conversationId },
-    });
+    const [message, participants] = await Promise.all([
+      this.prisma.message.findFirst({
+        where: { id: messageId, conversationId },
+      }),
+      this.prisma.participant.findMany({
+        where: { conversationId, leftAt: null },
+        select: { userId: true },
+      }),
+    ]);
+
+    const participant = participants.find((p) => p.userId === userId);
+    if (!participant) {
+      throw new AppException(
+        ErrorCode.CONVERSATION_NOT_FOUND,
+        'Conversation not found',
+        404,
+      );
+    }
 
     if (!message) {
       throw new AppException(
@@ -252,9 +270,11 @@ export class MessageService {
         404,
       );
     }
+
     if (message.senderId !== userId) {
       throw new AppException(ErrorCode.MESSAGE_FORBIDDEN, 'Forbidden', 403);
     }
+
     if (message.isDeleted) {
       throw new AppException(
         ErrorCode.MESSAGE_DELETED,
@@ -268,11 +288,6 @@ export class MessageService {
       data: { isDeleted: true, content: null, deletedAt: new Date() },
     });
 
-    const participants = await this.prisma.participant.findMany({
-      where: { conversationId, leftAt: null },
-      select: { userId: true },
-    });
-
     return {
       conversationId,
       messageId,
@@ -280,12 +295,27 @@ export class MessageService {
     };
   }
 
-  async react(userId: string, dto: ReactMessageDto) {
+  async reactMessage(userId: string, dto: ReactMessageDto) {
     const { conversationId, messageId, emoji } = dto;
 
-    const message = await this.prisma.message.findFirst({
-      where: { id: messageId, conversationId },
-    });
+    const [message, participants] = await Promise.all([
+      this.prisma.message.findFirst({
+        where: { id: messageId, conversationId },
+      }),
+      this.prisma.participant.findMany({
+        where: { conversationId, leftAt: null },
+        select: { userId: true },
+      }),
+    ]);
+
+    const participant = participants.find((p) => p.userId === userId);
+    if (!participant) {
+      throw new AppException(
+        ErrorCode.CONVERSATION_NOT_FOUND,
+        'Conversation not found',
+        404,
+      );
+    }
 
     if (!message) {
       throw new AppException(
@@ -307,11 +337,6 @@ export class MessageService {
       });
     }
 
-    const participants = await this.prisma.participant.findMany({
-      where: { conversationId, leftAt: null },
-      select: { userId: true },
-    });
-
     return {
       conversationId,
       messageId,
@@ -327,9 +352,8 @@ export class MessageService {
   ): Promise<bigint> {
     const key = `seq:conv:${conversationId}`;
 
-    const exists = await this.redis.exists(key);
-    if (!exists && lastSeq > 0n) {
-      await this.redis.setRaw(key, String(lastSeq));
+    if (lastSeq > 0n) {
+      await this.redis.setNx(key, String(lastSeq));
     }
 
     return BigInt(await this.redis.incr(key));

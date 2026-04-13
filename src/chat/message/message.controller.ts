@@ -23,7 +23,7 @@ export class MessageController {
     @Param('conversationId', ParseUUIDPipe) conversationId: string,
     @Query() query: ListMessagesQueryDto,
   ) {
-    return this.messageService.list(user.sub, conversationId, query);
+    return this.messageService.getMessages(user.sub, conversationId, query);
   }
 
   @Get(':messageId')
@@ -32,6 +32,6 @@ export class MessageController {
     @Param('conversationId', ParseUUIDPipe) conversationId: string,
     @Param('messageId', ParseUUIDPipe) messageId: string,
   ) {
-    return this.messageService.findOne(user.sub, conversationId, messageId);
+    return this.messageService.getMessage(user.sub, conversationId, messageId);
   }
 }

@@ -28,6 +28,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.set(key, value);
   }
 
+  async setNx(key: string, value: string): Promise<boolean> {
+    const result = await this.client.set(key, value, 'NX');
+    return result === 'OK';
+  }
+
   async get(key: string): Promise<string | null> {
     return this.client.get(key);
   }

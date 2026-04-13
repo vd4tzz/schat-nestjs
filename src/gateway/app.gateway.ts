@@ -91,10 +91,8 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleSendMessage(client: AppSocket, dto: SendMessageDto) {
     const userId = client.data.userId;
     try {
-      const { message, otherParticipantIds } = await this.messageService.send(
-        userId,
-        dto,
-      );
+      const { message, otherParticipantIds } =
+        await this.messageService.sendMessage(userId, dto);
 
       this.server
         .to(`user:${userId}`)
@@ -116,7 +114,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.data.userId;
 
     try {
-      const result = await this.messageService.markRead(userId, dto);
+      const result = await this.messageService.markReadMessage(userId, dto);
 
       for (const pid of result.participantIds) {
         this.server.to(`user:${pid}`).emit('read_receipt', {
@@ -138,7 +136,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleEditMessage(client: AppSocket, dto: EditMessageDto) {
     const userId = client.data.userId;
     try {
-      const { message, participantIds } = await this.messageService.edit(
+      const { message, participantIds } = await this.messageService.editMessage(
         userId,
         dto,
       );
@@ -157,7 +155,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleDeleteMessage(client: AppSocket, dto: DeleteMessageDto) {
     const userId = client.data.userId;
     try {
-      const result = await this.messageService.delete(userId, dto);
+      const result = await this.messageService.deleteMessage(userId, dto);
       for (const pid of result.participantIds) {
         this.server.to(`user:${pid}`).emit('message_deleted', {
           conversationId: result.conversationId,
@@ -177,7 +175,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.data.userId;
 
     try {
-      const result = await this.messageService.react(userId, dto);
+      const result = await this.messageService.reactMessage(userId, dto);
 
       for (const pid of result.participantIds) {
         this.server.to(`user:${pid}`).emit('reaction_updated', {
