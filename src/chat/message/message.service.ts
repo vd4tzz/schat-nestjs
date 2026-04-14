@@ -190,16 +190,29 @@ export class MessageService {
   async editMessage(userId: string, dto: EditMessageDto) {
     const { conversationId, messageId, content } = dto;
 
-    const [participants, message] = await Promise.all([
+    const [message, participants] = await Promise.all([
+      this.prisma.message.findFirst({
+        where: {
+          id: messageId,
+          senderId: userId,
+          isDeleted: false,
+          type: 'TEXT',
+        },
+      }),
+
       this.prisma.participant.findMany({
         where: { conversationId, leftAt: null },
         select: { userId: true },
       }),
-
-      this.prisma.message.findFirst({
-        where: { id: messageId, conversationId },
-      }),
     ]);
+
+    if (!message) {
+      throw new AppException(
+        ErrorCode.MESSAGE_NOT_FOUND,
+        'Message not found',
+        404,
+      );
+    }
 
     const participant = participants.find((p) => p.userId === userId);
     if (!participant) {
@@ -210,24 +223,11 @@ export class MessageService {
       );
     }
 
-    if (!message) {
-      throw new AppException(
-        ErrorCode.MESSAGE_NOT_FOUND,
-        'Message not found',
-        404,
-      );
-    }
-
-    if (message.senderId !== userId) {
-      throw new AppException(ErrorCode.MESSAGE_FORBIDDEN, 'Forbidden', 403);
-    }
-
-    if (message.isDeleted) {
-      throw new AppException(
-        ErrorCode.MESSAGE_DELETED,
-        'Message is deleted',
-        400,
-      );
+    if (message.content === content) {
+      return {
+        message,
+        participantIds: participants.map((p) => p.userId),
+      };
     }
 
     const updated = await this.prisma.message.update({
